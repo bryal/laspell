@@ -7,7 +7,7 @@ maintainer:          "96.bryal@gmail.com"
 copyright:           "2018 Johan Johansson"
 
 extra-source-files:
-- README.md
+- README.org
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -16,10 +16,12 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/laspell#readme>
+description:         Please see the README on GitHub at <https://github.com/bryal/laspell#readme>
 
 dependencies:
 - base >= 4.7 && < 5
+- parsec == 3.1.13.0
+- either == 5.0.1
 
 library:
   source-dirs: src
