@@ -2,13 +2,13 @@
 
 /NOTE: Work in progress!/
 
-A Haskell preprocessor to write Haskell with LISP syntax. The `lisk`
+A Haskell preprocessor to write Haskell with LISP syntax. The ~lisk~
 project does something similar I think?
 
 
 ** Build
 
-   To build, just run
+   To build, run
 
    #+BEGIN_SRC bash
 stack build
@@ -20,7 +20,7 @@ stack install
 
 ** Usage
 
-   Just add the pragma
+   Add the pragma
 
    #+BEGIN_SRC haskell
 {-# OPTIONS -F -pgmF laspell #-}
