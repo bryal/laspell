@@ -8,6 +8,13 @@ import Data.List (intercalate)
 import Data.Either.Combinators (rightToMaybe)
 import Control.Monad
 
+-- for every line, remove everything after first non-string comment char
+preprocess src = hindent (translate (removeComments src))
+
+removeComments = undefined
+translate = undefined
+hindent = undefined
+
 file = do
   spaces
   ps <- pragmas
@@ -87,16 +94,44 @@ typeDef = parens (do string "type"
                      rhs <- type'
                      return ("type " ++ lhs ++ " = " ++ rhs))
 
-dataDef = _
+dataDef = parens $ do
+  string "data"
+  spaces1
+  lhs <- simpletype
+  rhs <- option "" (spaces1 >> constrs)
+  der <- option "" (spaces1 >> deriving')
+  return ("data " ++ lhs ++ " " ++ rhs ++ " " ++ der)
+
+constrs = fmap (("= "++) . (intercalate " | "))
+               (parens (string "=" >> spaces1 >> (sepEndBy1 constr spaces1)))
+
+constr = choice [ ident
+                , parens (do string "record"
+                             spaces1
+                             con <- ident
+                             spaces1
+                             fields <- fmap (intercalate ", ") (sepEndBy1 field spaces1)
+                             return (con ++ " { " ++ fields ++ " }"))
+                , parens (do con <- ident
+                             spaces1
+                             ts <- sepEndBy1 type' spaces1
+                             return (con ++ " " ++ unwords ts)) ]
+  where field = parens (do name <- ident
+                           spaces1
+                           t <- type'
+                           return (name ++ " = " ++ t))
+
+deriving' = fmap (("deriving "++) . unwords) (parens (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1))
+
 newtypeDef = undefined
 classDef = undefined
 instanceDef = undefined
 decl = undefined
 
-simpletype = parens (do tyCon <- ident
-                        spaces1
-                        params <- sepEndBy1 ident spaces1
-                        return (tyCon ++ " " ++ unwords params))
+simpletype = ident <|> parens (do tyCon <- ident
+                                  spaces1
+                                  params <- sepEndBy1 ident spaces1
+                                  return (tyCon ++ " " ++ unwords params))
 
 type' = undefined
 
@@ -115,8 +150,6 @@ spaces1 = skipMany1 space
 (<:>) = liftM2 (:)
 
 {-
-
- 
 topdecls 	→ 	topdecl1 ; … ; topdecln 	    (n ≥ 0)
 topdecl 	→ 	type simpletype = type
 	| 	data [context =>] simpletype [= constrs] [deriving]
@@ -126,7 +159,7 @@ topdecl 	→ 	type simpletype = type
 	| 	default (type1 , … , typen) 	    (n ≥ 0)
 	| 	foreign fdecl
 	| 	decl
- 
+
 decls 	→ 	{ decl1 ; … ; decln } 	    (n ≥ 0)
 decl 	→ 	gendecl
 	| 	(funlhs | pat) rhs
@@ -402,7 +435,7 @@ new = parens (do string "new"
 
 expr = choice [nil, num, str, bool, var, app, if', lam, let', new]
 
-preprocess src = for every line, remove everything after first non-string comment char
+
 
 
 -}
