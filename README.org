@@ -1,0 +1,71 @@
+#+TITLE: The Laspell Haskell reprocessor
+
+/NOTE: Work in progress!/
+
+A Haskell preprocessor to write Haskell with LISP syntax. The `lisk`
+project does something similar I think?
+
+
+** Build
+
+   To build, just run
+
+   #+BEGIN_SRC bash
+stack build
+stack install
+   #+END_SRC
+
+   After installing the binary, make sure it's in your path.
+
+
+** Usage
+
+   Just add the pragma
+
+   #+BEGIN_SRC haskell
+{-# OPTIONS -F -pgmF laspell #-}
+   #+END_SRC
+
+   to the file you want to use LISP syntax in. Then you can build/compile
+   your file/project as usual.
+
+
+** Example
+
+   /NOTE: Not actually implemented yet! Just the envisioned
+   usage/syntax./
+
+   #+BEGIN_SRC haskell
+{-# OPTIONS -F -pgmF laspell #-}
+
+(module Foo)
+
+(= a 1)
+
+(:: f (-> Int Int Int))
+(= (f x y)
+   (+ a x y))
+   
+(= main (do (putStrLn "result of computation:")
+            (print (f 2 3))))
+
+   #+END_SRC
+
+
+** License
+
+   AGPLv3
+
+   Copyright (C) 2018  Johan Johansson
+
+   This program is free software: you can redistribute it and/or
+   modify it under the terms of the GNU Affero General Public License
+   as published by the Free Software Foundation, either version 3 of
+   the License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Affero General Public License for more details.
+
+   See [[./LICENSE][LICENSE]]

@@ -1,7 +1,7 @@
 name:                laspell
 version:             0.1.0.0
 github:              "bryal/laspell"
-license:             BSD3
+license:             AGPL-3
 author:              "Johan Johansson"
 maintainer:          "96.bryal@gmail.com"
 copyright:           "2018 Johan Johansson"
@@ -25,7 +25,7 @@ library:
   source-dirs: src
 
 executables:
-  laspell-exe:
+  laspell:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
