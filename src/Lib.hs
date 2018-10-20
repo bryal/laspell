@@ -232,8 +232,6 @@ fpat = parens (do name <- ident
                   p <- pat
                   return (name ++ " = " ++ p))
 
-expr = undefined
-
 negLit = parens' (char '-' <:> spaces1 <++> num)
 
 lit = num <|> str
@@ -279,7 +277,86 @@ spaces' = many space
 (<:>) :: Monad t => t a -> t [a] -> t [a]
 (<:>) = liftM2 (:)
 
+expr = choice [ typeAscr
+              , negation
+              , lam
+              , let_
+              , if_
+              , case_
+              , do_
+              , app
+              , tuple
+              , list
+              , lit
+              , ident
+              , record
+              , update ]
+
+typeAscr = parens' $ do
+  string "::"
+  spaces1
+  e <- expr
+  spaces1
+  t <- type'
+  return (e ++ " :: " ++ t)
+
+negation = parens' (char '-' <:> spaces1 <++> expr)
+
+lam = parens' $ do
+  string "\\"
+  spaces1
+  ps <- parens (sepEndBy1 pat spaces1)
+  spaces1
+  b <- expr
+  return ("\\ " ++ unwords ps ++ " -> " ++ b)
+
+let_ = parens' $ do
+  string "let"
+  spaces1
+  binds <- parens decls1
+  spaces1
+  bod <- expr
+  return ("let " ++ binds ++" in " ++ bod)
+
+if_ = parens' $ do
+  string "if"
+  spaces1
+  pred <- expr
+  spaces1
+  conseq <- expr
+  spaces1
+  alt <- expr
+  return ("if " ++ pred ++ " then " ++ conseq ++ " else " ++ alt)
+
+case_ = undefined
+do_ = undefined
+app = undefined
+tuple = undefined
+list = undefined
+record = undefined
+update = undefined
+    
 {-
+
+lexp 	→ 
+	| 	case exp of { alts } 	    (case expression)
+	| 	do { stmts } 	    (do expression)
+	| 	fexp
+fexp 	→ 	[fexp] aexp 	    (function application)
+ 
+aexp 	→ 	qvar 	    (variable)
+	| 	gcon 	    (general constructor)
+	| 	literal
+	| 	( exp ) 	    (parenthesized expression)
+	| 	( exp1 , … , expk ) 	    (tuple, k ≥ 2)
+	| 	[ exp1 , … , expk ] 	    (list, k ≥ 1)
+	| 	[ exp1 [, exp2] .. [exp3] ] 	    (arithmetic sequence)
+	| 	[ exp | qual1 , … , qualn ] 	    (list comprehension, n ≥ 1)
+	| 	( infixexp qop ) 	    (left section)
+	| 	( qop⟨-⟩ infixexp ) 	    (right section)
+	| 	qcon { fbind1 , … , fbindn } 	    (labeled construction, n ≥ 0)
+	| 	aexp⟨qcon⟩ { fbind1 , … , fbindn } 	    (labeled update, n  ≥  1)
+
 ops 	→ 	op1 , … , opn 	    (n ≥ 1)
 vars 	→ 	var1 , …, varn 	    (n ≥ 1)
 fixity 	→ 	infixl | infixr | infix
@@ -308,7 +385,6 @@ scontext 	→ 	simpleclass
 	| 	( simpleclass1 , … , simpleclassn ) 	    (n ≥ 0)
 simpleclass 	→ 	qtycls tyvar
  
-simpletype 	→ 	tycon tyvar1 … tyvark 	    (k ≥ 0)
 constrs 	→ 	constr1 | … | constrn 	    (n ≥ 1)
 constr 	→ 	con [!] atype1 … [!] atypek 	    (arity con  =  k, k ≥ 0)
 	| 	(btype | ! atype) conop (btype | ! atype) 	    (infix conop)
@@ -353,34 +429,7 @@ guards 	→ 	| guard1, …, guardn 	    (n ≥ 1)
 guard 	→ 	pat <- infixexp 	    (pattern guard)
 	| 	let decls 	    (local declaration)
 	| 	infixexp 	    (boolean guard)
- 
-exp 	→ 	infixexp :: [context =>] type 	    (expression type signature)
-	| 	infixexp
- 
-infixexp 	→ 	lexp qop infixexp 	    (infix operator application)
-	| 	- infixexp 	    (prefix negation)
-	| 	lexp
- 
-lexp 	→ 	\ apat1 … apatn -> exp 	    (lambda abstraction, n ≥ 1)
-	| 	let decls in exp 	    (let expression)
-	| 	if exp [;] then exp [;] else exp 	    (conditional)
-	| 	case exp of { alts } 	    (case expression)
-	| 	do { stmts } 	    (do expression)
-	| 	fexp
-fexp 	→ 	[fexp] aexp 	    (function application)
- 
-aexp 	→ 	qvar 	    (variable)
-	| 	gcon 	    (general constructor)
-	| 	literal
-	| 	( exp ) 	    (parenthesized expression)
-	| 	( exp1 , … , expk ) 	    (tuple, k ≥ 2)
-	| 	[ exp1 , … , expk ] 	    (list, k ≥ 1)
-	| 	[ exp1 [, exp2] .. [exp3] ] 	    (arithmetic sequence)
-	| 	[ exp | qual1 , … , qualn ] 	    (list comprehension, n ≥ 1)
-	| 	( infixexp qop ) 	    (left section)
-	| 	( qop⟨-⟩ infixexp ) 	    (right section)
-	| 	qcon { fbind1 , … , fbindn } 	    (labeled construction, n ≥ 0)
-	| 	aexp⟨qcon⟩ { fbind1 , … , fbindn } 	    (labeled update, n  ≥  1)
+
  
 qual 	→ 	pat <- exp 	    (generator)
 	| 	let decls 	    (local declaration)
@@ -400,42 +449,6 @@ stmt 	→ 	exp ;
 	| 	; 	    (empty statement)
  
 fbind 	→ 	qvar = exp
- 
-pat 	→ 	lpat qconop pat 	    (infix constructor)
-	| 	lpat
- 
-lpat 	→ 	apat
-	| 	- (integer | float) 	    (negative literal)
-	| 	gcon apat1 … apatk 	    (arity gcon  =  k, k ≥ 1)
- 
-apat 	→ 	var [ @ apat] 	    (as pattern)
-	| 	gcon 	    (arity gcon  =  0)
-	| 	qcon { fpat1 , … , fpatk } 	    (labeled pattern, k ≥ 0)
-	| 	literal
-	| 	_ 	    (wildcard)
-	| 	( pat ) 	    (parenthesized pattern)
-	| 	( pat1 , … , patk ) 	    (tuple pattern, k ≥ 2)
-	| 	[ pat1 , … , patk ] 	    (list pattern, k ≥ 1)
-	| 	~ apat 	    (irrefutable pattern)
- 
-fpat 	→ 	qvar = pat
- 
-gcon 	→ 	()
-	| 	[]
-	| 	(,{,})
-	| 	qcon
- 
-var 	→ 	varid | ( varsym ) 	    (variable)
-qvar 	→ 	qvarid | ( qvarsym ) 	    (qualified variable)
-con 	→ 	conid | ( consym ) 	    (constructor)
-qcon 	→ 	qconid | ( gconsym ) 	    (qualified constructor)
-varop 	→ 	varsym | `  varid ` 	    (variable operator)
-qvarop 	→ 	qvarsym | `  qvarid ` 	    (qualified variable operator)
-conop 	→ 	consym | `  conid ` 	    (constructor operator)
-qconop 	→ 	gconsym | `  qconid ` 	    (qualified constructor operator)
-op 	→ 	varop | conop 	    (operator)
-qop 	→ 	qvarop | qconop 	    (qualified operator)
-gconsym 	→ 	: | qconsym 
 
 
 
