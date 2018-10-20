@@ -116,24 +116,96 @@ constr = choice [ ident
                              spaces1
                              ts <- sepEndBy1 type' spaces1
                              return (con ++ " " ++ unwords ts)) ]
-  where field = parens (do name <- ident
-                           spaces1
-                           t <- type'
-                           return (name ++ " = " ++ t))
+
+newtypeDef = parens $ do
+  string "newtype"
+  spaces1
+  lhs <- simpletype
+  spaces1
+  rhs <- newconstr
+  der <- option "" (spaces1 >> deriving')
+  return ("newtype " ++ lhs ++ " = " ++ rhs ++ " " ++ der)
+
+newconstr = parens ((<|>) (do string "record"
+                              spaces1
+                              con <- ident
+                              spaces1
+                              f <- field
+                              return (con ++ " { " ++ f ++ " }"))
+                          (do con <- ident
+                              spaces1
+                              t <- type'
+                              return (con ++ " " ++ t)))
+
+field = parens (do name <- ident
+                   spaces1
+                   t <- type'
+                   return (name ++ " = " ++ t))
 
 deriving' = fmap (("deriving "++) . unwords) (parens (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1))
 
-newtypeDef = undefined
-classDef = undefined
-instanceDef = undefined
-decl = undefined
+classDef = parens $ do
+  string "class"
+  spaces1
+  lhs <- parens (ident <++> spaces1 <++> ident)
+  rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
+  return ("class " ++ lhs ++ rhs)
+
+instanceDef = parens $ do
+  string "instance"
+  spaces1
+  lhs <- parens (ident <++> spaces1 <++> ident)
+  rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
+  return ("class " ++ lhs ++ rhs)
+
+decls = decls' sepEndBy
+
+decls1 = decls' sepEndBy1
+
+decls' sep = fmap (intercalate "; ") (sep decl spaces1)
+
+decl = typeSig <|> def
+
+typeSig = parens $ do
+  string "::"
+  spaces1
+  name <- ident
+  spaces1
+  ty <- type'
+  return (name ++ " :: " ++ ty)
+
+def = parens $ do
+  char '='
+  spaces1
+  lhs <- pat
+  spaces1
+  rhs <- expr
+  return (lhs ++ " = " ++ rhs)
 
 simpletype = ident <|> parens (do tyCon <- ident
                                   spaces1
                                   params <- sepEndBy1 ident spaces1
                                   return (tyCon ++ " " ++ unwords params))
 
-type' = undefined
+type' = ident <|> funType <|> typeApp
+
+funType = parens $ do
+  string "->"
+  spaces1
+  t0 <- type'
+  spaces1
+  tys <- sepEndBy1 type' spaces1
+  return ("(" ++ foldl (\acc t -> acc ++ " -> " ++ t) t0 tys ++ ")")
+
+typeApp = parens $ do
+  con <- type'
+  spaces1
+  args <- sepEndBy1 type' spaces1
+  return (con ++ " " ++ unwords args)
+
+pat = undefined
+
+expr = undefined
 
 ident = identFirstChar <:> many identRestChar
 identFirstChar = letter <|> char '\'' <|> char '-' <|> char '_'
@@ -141,7 +213,7 @@ identRestChar = identFirstChar <|> digit
   
 parens = between (char '(' >> spaces) (spaces >> char ')')
 
-spaces1 = skipMany1 space
+spaces1 = many1 space
 
 (<++>) :: Monad t => t [a] -> t [a] -> t [a]
 (<++>) = liftM2 (++)
@@ -150,32 +222,6 @@ spaces1 = skipMany1 space
 (<:>) = liftM2 (:)
 
 {-
-topdecls 	→ 	topdecl1 ; … ; topdecln 	    (n ≥ 0)
-topdecl 	→ 	type simpletype = type
-	| 	data [context =>] simpletype [= constrs] [deriving]
-	| 	newtype [context =>] simpletype = newconstr [deriving]
-	| 	class [scontext =>] tycls tyvar [where cdecls]
-	| 	instance [scontext =>] qtycls inst [where idecls]
-	| 	default (type1 , … , typen) 	    (n ≥ 0)
-	| 	foreign fdecl
-	| 	decl
-
-decls 	→ 	{ decl1 ; … ; decln } 	    (n ≥ 0)
-decl 	→ 	gendecl
-	| 	(funlhs | pat) rhs
- 
-cdecls 	→ 	{ cdecl1 ; … ; cdecln } 	    (n ≥ 0)
-cdecl 	→ 	gendecl
-	| 	(funlhs | var) rhs
- 
-idecls 	→ 	{ idecl1 ; … ; idecln } 	    (n ≥ 0)
-idecl 	→ 	(funlhs | var) rhs
-	| 		    (empty)
- 
-gendecl 	→ 	vars :: [context =>] type 	    (type signature)
-	| 	fixity [integer] ops 	    (fixity declaration)
-	| 		    (empty declaration)
- 
 ops 	→ 	op1 , … , opn 	    (n ≥ 1)
 vars 	→ 	var1 , …, varn 	    (n ≥ 1)
 fixity 	→ 	infixl | infixr | infix
