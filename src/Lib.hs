@@ -203,17 +203,75 @@ typeApp = parens $ do
   args <- sepEndBy1 type' spaces1
   return (con ++ " " ++ unwords args)
 
-pat = undefined
+pat :: Parsec String u String
+pat = choice [ negLit
+             , lit
+             , wildcard
+             , parens' (do char '@'
+                           name <- ident
+                           p <- pat
+                           return (name ++ " @ " ++ p))
+             , char '(' <:> spaces' <++> string ")"
+             , char '[' <:> spaces' <++> string "]"
+             , parens' (do char ','
+                           spaces1
+                           ps <- sepEndBy1 pat spaces1
+                           return (intercalate ", " ps))
+             , brackets' (fmap (intercalate ", ") (sepEndBy1 pat spaces1))
+             , rpat ]
+
+rpat :: Parsec String u String
+rpat = parens (do string "record"
+                  spaces1
+                  fs <- sepEndBy1 fpat spaces1
+                  return ("{" ++ intercalate ", " fs ++ "}"))
+
+fpat :: Parsec String u String
+fpat = parens (do name <- ident
+                  spaces1
+                  p <- pat
+                  return (name ++ " = " ++ p))
 
 expr = undefined
 
-ident = identFirstChar <:> many identRestChar
-identFirstChar = letter <|> char '\'' <|> char '-' <|> char '_'
-identRestChar = identFirstChar <|> digit
+negLit = parens' (char '-' <:> spaces1 <++> num)
+
+lit = num <|> str
+
+wildcard = string "_"
+
+num = many1 digit <++> option "" (char '.' <:> many1 digit)
+
+str = char '"' <:> fmap concat (many (escaped <|> fmap (\c -> [c]) (noneOf ['"']))) <++> string "\""
+
+escaped :: Parsec String u String
+escaped = do
+  char '\\'
+  c <- anyChar
+  return ['\\', c]
+
+ident = (identFirstChar <:> many identRestChar) <|> rator
+
+identFirstChar = letter <|> char '_'
+
+identRestChar = alphaNum <|> oneOf "_'"
+
+rator = fmap (("("++) . (++")")) (many1 ratorChar)
+
+ratorChar = oneOf ":!#$%&*+./<=>?@\\^|-~"
   
 parens = between (char '(' >> spaces) (spaces >> char ')')
 
+parens' = (fmap (("("++) . (++")"))) . parens
+
+brackets :: Parsec String u a -> Parsec String u a
+brackets = between (char '[' >> spaces) (spaces >> char ']')
+
+brackets' = (fmap (("["++) . (++"]"))) . parens
+
 spaces1 = many1 space
+
+spaces' = many space
 
 (<++>) :: Monad t => t [a] -> t [a] -> t [a]
 (<++>) = liftM2 (++)
