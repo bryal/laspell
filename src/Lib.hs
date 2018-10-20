@@ -265,7 +265,7 @@ parens' = (fmap (("("++) . (++")"))) . parens
 brackets :: Parsec String u a -> Parsec String u a
 brackets = between (char '[' >> spaces) (spaces >> char ']')
 
-brackets' = (fmap (("["++) . (++"]"))) . parens
+brackets' = (fmap (("["++) . (++"]"))) . brackets
 
 spaces1 = many1 space
 
@@ -277,22 +277,23 @@ spaces' = many space
 (<:>) :: Monad t => t a -> t [a] -> t [a]
 (<:>) = liftM2 (:)
 
-expr = choice [ typeAscr
-              , negation
-              , lam
-              , let_
-              , if_
-              , case_
-              , do_
-              , app
-              , tuple
-              , list
+expr = choice [ list
               , lit
               , ident
-              , record
-              , update ]
+              , parens' pexpr]
 
-typeAscr = parens' $ do
+pexpr = choice [ typeAscr
+               , lam
+               , let_
+               , if_
+               , match
+               , do_
+               , app
+               , tuple
+               , record
+               , update ]
+
+typeAscr = do
   string "::"
   spaces1
   e <- expr
@@ -300,9 +301,7 @@ typeAscr = parens' $ do
   t <- type'
   return (e ++ " :: " ++ t)
 
-negation = parens' (char '-' <:> spaces1 <++> expr)
-
-lam = parens' $ do
+lam = do
   string "\\"
   spaces1
   ps <- parens (sepEndBy1 pat spaces1)
@@ -310,7 +309,7 @@ lam = parens' $ do
   b <- expr
   return ("\\ " ++ unwords ps ++ " -> " ++ b)
 
-let_ = parens' $ do
+let_ = do
   string "let"
   spaces1
   binds <- parens decls1
@@ -318,7 +317,7 @@ let_ = parens' $ do
   bod <- expr
   return ("let " ++ binds ++" in " ++ bod)
 
-if_ = parens' $ do
+if_ = do
   string "if"
   spaces1
   pred <- expr
@@ -328,231 +327,68 @@ if_ = parens' $ do
   alt <- expr
   return ("if " ++ pred ++ " then " ++ conseq ++ " else " ++ alt)
 
-case_ = undefined
-do_ = undefined
-app = undefined
-tuple = undefined
-list = undefined
-record = undefined
-update = undefined
-    
-{-
+match = do
+  string "match"
+  spaces1
+  e <- expr
+  spaces1
+  cs <- cases
+  return ("case " ++ e ++ " of " ++ cs)
 
-lexp 	→ 
-	| 	case exp of { alts } 	    (case expression)
-	| 	do { stmts } 	    (do expression)
-	| 	fexp
-fexp 	→ 	[fexp] aexp 	    (function application)
- 
-aexp 	→ 	qvar 	    (variable)
-	| 	gcon 	    (general constructor)
-	| 	literal
-	| 	( exp ) 	    (parenthesized expression)
-	| 	( exp1 , … , expk ) 	    (tuple, k ≥ 2)
-	| 	[ exp1 , … , expk ] 	    (list, k ≥ 1)
-	| 	[ exp1 [, exp2] .. [exp3] ] 	    (arithmetic sequence)
-	| 	[ exp | qual1 , … , qualn ] 	    (list comprehension, n ≥ 1)
-	| 	( infixexp qop ) 	    (left section)
-	| 	( qop⟨-⟩ infixexp ) 	    (right section)
-	| 	qcon { fbind1 , … , fbindn } 	    (labeled construction, n ≥ 0)
-	| 	aexp⟨qcon⟩ { fbind1 , … , fbindn } 	    (labeled update, n  ≥  1)
+cases = fmap (intercalate "; ") (sepEndBy1 case_ spaces1)
 
-ops 	→ 	op1 , … , opn 	    (n ≥ 1)
-vars 	→ 	var1 , …, varn 	    (n ≥ 1)
-fixity 	→ 	infixl | infixr | infix
- 
-type 	→ 	btype [-> type] 	    (function type)
- 
-btype 	→ 	[btype] atype 	    (type application)
- 
-atype 	→ 	gtycon
-	| 	tyvar
-	| 	( type1 , … , typek ) 	    (tuple type, k ≥ 2)
-	| 	[ type ] 	    (list type)
-	| 	( type ) 	    (parenthesized constructor)
- 
-gtycon 	→ 	qtycon
-	| 	() 	    (unit type)
-	| 	[] 	    (list constructor)
-	| 	(->) 	    (function constructor)
-	| 	(,{,}) 	    (tupling constructors)
- 
-context 	→ 	class
-	| 	( class1 , … , classn ) 	    (n ≥ 0)
-class 	→ 	qtycls tyvar
-	| 	qtycls ( tyvar atype1 … atypen ) 	    (n ≥ 1)
-scontext 	→ 	simpleclass
-	| 	( simpleclass1 , … , simpleclassn ) 	    (n ≥ 0)
-simpleclass 	→ 	qtycls tyvar
- 
-constrs 	→ 	constr1 | … | constrn 	    (n ≥ 1)
-constr 	→ 	con [!] atype1 … [!] atypek 	    (arity con  =  k, k ≥ 0)
-	| 	(btype | ! atype) conop (btype | ! atype) 	    (infix conop)
-	| 	con { fielddecl1 , … , fielddecln } 	    (n ≥ 0)
-newconstr 	→ 	con atype
-	| 	con { var :: type }
-fielddecl 	→ 	vars :: (type | ! atype)
-deriving 	→ 	deriving (dclass | (dclass1, … , dclassn)) 	    (n ≥ 0)
-dclass 	→ 	qtycls
- 
-inst 	→ 	gtycon
-	| 	( gtycon tyvar1 … tyvark ) 	    (k ≥ 0, tyvars distinct)
-	| 	( tyvar1 , … , tyvark ) 	    (k ≥ 2, tyvars distinct)
-	| 	[ tyvar ]
-	| 	( tyvar1 -> tyvar2 ) 	    tyvar1 and tyvar2 distinct
- 
-fdecl 	→ 	import callconv [safety] impent var :: ftype 	    (define variable)
-	| 	export callconv expent var :: ftype 	    (expose variable)
-callconv 	→ 	ccall | stdcall | cplusplus 	    (calling convention)
-	| 	jvm | dotnet
-	| 	 system-specific calling conventions
-impent 	→ 	[string] 	    (see Section 8.5.1)
-expent 	→ 	[string] 	    (see Section 8.5.1)
-safety 	→ 	unsafe | safe
- 
-ftype 	→ 	frtype
-	| 	fatype  →  ftype
-frtype 	→ 	fatype
-	| 	()
-fatype 	→ 	qtycon atype1 … atypek 	    (k  ≥  0)
- 
-funlhs 	→ 	var apat { apat }
-	| 	pat varop pat
-	| 	( funlhs ) apat { apat }
- 
-rhs 	→ 	= exp [where decls]
-	| 	gdrhs [where decls]
- 
-gdrhs 	→ 	guards = exp [gdrhs]
- 
-guards 	→ 	| guard1, …, guardn 	    (n ≥ 1)
-guard 	→ 	pat <- infixexp 	    (pattern guard)
-	| 	let decls 	    (local declaration)
-	| 	infixexp 	    (boolean guard)
+case_ = parens $ do
+  p <- pat
+  spaces1
+  b <- expr
+  return (p ++ " -> " ++ b)
+  
+do_ = do
+  string "do"
+  spaces1
+  ss <- stmts
+  return ("do " ++ ss)
 
- 
-qual 	→ 	pat <- exp 	    (generator)
-	| 	let decls 	    (local declaration)
-	| 	exp 	    (guard)
- 
-alts 	→ 	alt1 ; … ; altn 	    (n ≥ 1)
-alt 	→ 	pat -> exp [where decls]
-	| 	pat gdpat [where decls]
-	| 		    (empty alternative)
- 
-gdpat 	→ 	guards -> exp [ gdpat ]
- 
-stmts 	→ 	stmt1 … stmtn exp [;] 	    (n ≥ 0)
-stmt 	→ 	exp ;
-	| 	pat <- exp ;
-	| 	let decls ;
-	| 	; 	    (empty statement)
- 
-fbind 	→ 	qvar = exp
+stmts = fmap (intercalate "; ") (sepEndBy1 stmt spaces1)
 
+stmt = bind <|> expr
 
+bind = parens $ do
+  string "<-"
+  spaces1
+  lhs <- pat
+  spaces1
+  rhs <- expr
+  return (lhs ++ " <- " ++ rhs)
+  
+app = do
+  op <- expr
+  spaces1
+  args <- fmap unwords (sepEndBy1 expr spaces1)
+  return (op ++ " " ++ args)
+  
+tuple = do
+  char ','
+  spaces1
+  es <- fmap (intercalate ", ") (sepEndBy1 expr spaces1)
+  return es
+  
+list = brackets' (fmap (intercalate ", ") (sepEndBy1 expr spaces1))
 
-            
+record = do
+  string "record"
+  spaces1
+  fs <- fmap (intercalate ", ") (sepEndBy1 fbind spaces1)
+  return ("{ " ++ fs ++ " }")
 
-data Expr = Nil
-          | Num String
-          | Str String
-          | Bool Bool
-          | Var String
-          | App Expr Expr
-          | If Expr Expr Expr
-          | Lam String Expr
-          | Let [(String, Expr)] Expr
-          -- | TypeAscript ...
-          -- | Cast ...
-          | New String [Expr]
-          -- | Match Expr [(Patt, Expr)]
-  deriving (Show, Eq)
-
-and' a b = a && b
-
-isBracket c = elem c "()[]{}"
-
-(<:>) = liftM2 (:)
-
-(<++>) = liftM2 (++)
-
-spaces1 = skipMany1 space
-
-symbol = satisfy (\c -> and [ any (\pred -> pred c)
-                                  [isMark, isPunctuation, isSymbol]
-                            , not (isBracket c)
-                            , not (c == '"') ])
-
-identFirstChar = letter <|> symbol
-identRestChar = identFirstChar <|> digit
-ident = identFirstChar <:> many identRestChar
-
-escaped :: Parsec String () String
-escaped = do
-  char '\\'
-  c <- anyChar
-  return ['\\', c]
-
-parens = between (char '(' >> spaces) (spaces >> char ')') 
-
-nil = fmap (const Nil) (string "nil")
-
-num = fmap Num (many1 digit <++> option "" (char '.' <:> many1 digit))
-
-str' = do
-  char '"'
-  s <- many (escaped <|> fmap (\c -> [c]) (noneOf ['"']))
-  char '"'
-  return (concat s)
-
-str = fmap Str str'
-
-bool :: Parsec String u Expr
-bool = fmap Bool ((<|>) (fmap (const True) (string "true"))
-                        (fmap (const False) (string "false")))
-
-var = fmap Var ident
-
-app = parens (do rator <- expr
-                 rands <- many1 (spaces1 >> expr)
-                 return (foldl App rator rands))
-
-if' = parens (do string "if"
-                 spaces1
-                 pred <- expr
-                 spaces1
-                 conseq <- expr
-                 spaces1
-                 alt <- expr
-                 return (If pred conseq alt))
-
-lam = parens (do string "lambda"
-                 spaces1
-                 params <- parens (sepEndBy1 ident spaces1)
-                 spaces1
-                 body <- expr
-                 return (foldr Lam body params))
-
-let' = parens (do string "let"
-                  spaces1
-                  binds <- bindings
-                  spaces1
-                  body <- expr
-                  return (Let binds body))
-  where bindings = parens ((>>) spaces (sepEndBy binding spaces))
-        binding = parens (liftM2 (,) ident (spaces1 >> expr))
-
-new = parens (do string "new"
-                 spaces1
-                 variant <- ident
-                 spaces1
-                 members <- sepEndBy1 expr spaces1
-                 return (New variant members))
-
-expr = choice [nil, num, str, bool, var, app, if', lam, let', new]
-
-
-
-
--}
+fbind = parens $ do
+  lhs <- ident
+  spaces1
+  rhs <- expr
+  return (lhs ++ " = " ++ rhs)
+  
+update = do
+  e <- expr
+  spaces1
+  assignments <- fmap (intercalate ", ") (sepEndBy1 fbind spaces1)
+  return (e ++ " { " ++ assignments ++ " }")
