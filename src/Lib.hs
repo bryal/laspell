@@ -5,15 +5,33 @@ module Lib where
 import Text.Parsec
 import Data.Char (isMark, isPunctuation, isSymbol)
 import Data.List (intercalate)
-import Data.Either.Combinators (rightToMaybe)
+import Data.Either
 import Control.Monad
+import qualified HIndent as H
+import qualified HIndent.Types as HT
+import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Char8 (pack)
+import Data.Binary.Builder (toLazyByteString)
 
 -- for every line, remove everything after first non-string comment char
-preprocess src = hindent (translate (removeComments src))
+preprocess filename src = hindent (translate filename (removeComments src))
 
-removeComments = undefined
-translate = undefined
-hindent = undefined
+removeComments src = rc src False
+  where rc ('\n':src)    _     = '\n' : (rc src False)
+        rc (_:src)       True  = rc src True
+        rc ('-':'-':src) _     = rc src True
+        rc (c:src)       False = c : (rc src False)
+        rc ""            _     = ""
+
+translate :: FilePath -> String -> String
+translate filename src = case (parse file filename src) of
+  Right s -> s
+  Left e -> error ("Error translating: " ++ show e)
+
+hindent :: String -> ByteString
+hindent src = case (H.reformat HT.defaultConfig Nothing Nothing (pack src)) of
+  Right b -> toLazyByteString b
+  Left e -> error ("Error applying HIndent: " ++ e)
 
 file = do
   spaces
@@ -30,11 +48,11 @@ pragma = string "{-#" >> manyTill anyChar (string "#-}")
 
 module' = do
   m <- parens (do string "module"
-                  name <- ident
                   spaces1
-                  exps <- option "" exports
+                  name <- ident
+                  exps <- option "" (spaces1 >> exports)
                   return ("module " ++ name ++ " " ++ exps ++ " where"))
-  spaces1
+  spaces
   b <- body
   return (m ++ "\n" ++ b)
 
@@ -45,30 +63,26 @@ export = ident <|> parens (do constr <- ident
                               variants <- sepEndBy1 ident spaces1
                               return (constr ++ " (" ++ intercalate ", " variants ++ ")"))
 
-body = do
-  is <- impDecls
-  ts <- topDecls
-  return (is ++ "\n" ++ ts)
+body = do (fmap unlines (sepEndBy (parens (impDecl <|> topDecl)) spaces))
 
-impDecls = fmap unlines (sepEndBy impDecl spaces)
-
-impDecl = parens (do string "import"
-                     q <- option "" (char '-' >> string "qualified")
-                     spaces1
-                     m <- (<|>) ident
-                                (parens (do string "as"
-                                            spaces1
-                                            m <- ident
-                                            spaces1
-                                            alias <- ident
-                                            return (m ++ " as " ++ alias)))
-                     r <- option "" ((<|>) (do spaces1
-                                               string "hiding"
-                                               spaces1
-                                               is <- imports
-                                               return ("hiding " ++ is))
-                                           (spaces1 >> imports))
-                     return ("import " ++ q ++ " " ++ m ++ " " ++ r))
+impDecl = do
+  string "import"
+  q <- option "" (char '-' >> string "qualified")
+  spaces1
+  m <- (<|>) ident
+             (parens (do string "as"
+                         spaces1
+                         m <- ident
+                         spaces1
+                         alias <- ident
+                         return (m ++ " as " ++ alias)))
+  r <- option "" ((<|>) (do spaces1
+                            string "hiding"
+                            spaces1
+                            is <- imports
+                            return ("hiding " ++ is))
+                        (spaces1 >> imports))
+  return ("import " ++ q ++ " " ++ m ++ " " ++ r)
 
 imports = fmap (("("++) . (++")") . intercalate ", ") (parens (sepEndBy import' spaces1))
 
@@ -78,23 +92,22 @@ import' = (<|>) ident
                             members <- sepEndBy1 ident spaces1
                             return (tyCon ++ " (" ++ intercalate ", " members ++ ")")))
 
-topDecls = fmap unlines (sepEndBy topDecl spaces)
-
 topDecl = choice [ typeDef
                  , dataDef
                  , newtypeDef
                  , classDef
                  , instanceDef
-                 , decl ]
+                 , decl' ]
 
-typeDef = parens (do string "type"
-                     spaces1
-                     lhs <- simpletype
-                     spaces1
-                     rhs <- type'
-                     return ("type " ++ lhs ++ " = " ++ rhs))
+typeDef = do
+  string "type"
+  spaces1
+  lhs <- simpletype
+  spaces1
+  rhs <- type'
+  return ("type " ++ lhs ++ " = " ++ rhs)
 
-dataDef = parens $ do
+dataDef = do
   string "data"
   spaces1
   lhs <- simpletype
@@ -117,7 +130,7 @@ constr = choice [ ident
                              ts <- sepEndBy1 type' spaces1
                              return (con ++ " " ++ unwords ts)) ]
 
-newtypeDef = parens $ do
+newtypeDef = do
   string "newtype"
   spaces1
   lhs <- simpletype
@@ -144,14 +157,14 @@ field = parens (do name <- ident
 
 deriving' = fmap (("deriving "++) . unwords) (parens (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1))
 
-classDef = parens $ do
+classDef = do
   string "class"
   spaces1
   lhs <- parens (ident <++> spaces1 <++> ident)
   rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
   return ("class " ++ lhs ++ rhs)
 
-instanceDef = parens $ do
+instanceDef = do
   string "instance"
   spaces1
   lhs <- parens (ident <++> spaces1 <++> ident)
@@ -164,9 +177,11 @@ decls1 = decls' sepEndBy1
 
 decls' sep = fmap (intercalate "; ") (sep decl spaces1)
 
-decl = typeSig <|> def
+decl = parens decl'
 
-typeSig = parens $ do
+decl' = typeSig <|> def
+
+typeSig = do
   string "::"
   spaces1
   name <- ident
@@ -174,7 +189,7 @@ typeSig = parens $ do
   ty <- type'
   return (name ++ " :: " ++ ty)
 
-def = parens $ do
+def = do
   char '='
   spaces1
   lhs <- pat
@@ -204,7 +219,8 @@ typeApp = parens $ do
   return (con ++ " " ++ unwords args)
 
 pat :: Parsec String u String
-pat = choice [ negLit
+pat = choice [ ident
+             , negLit
              , lit
              , wildcard
              , parens' (do char '@'

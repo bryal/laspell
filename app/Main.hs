@@ -1,6 +1,7 @@
 module Main where
 
 import Lib
+import qualified Data.ByteString.Lazy as BSL
 import System.Environment
 
 help = "Laspell - A preprocessor for Haskell to use LISP syntax.\n"
@@ -11,7 +12,7 @@ help = "Laspell - A preprocessor for Haskell to use LISP syntax.\n"
 
 preprocessFile from to = do
   src <- readFile from
-  writeFile to (preprocess src)
+  BSL.writeFile to (preprocess from src)
 
 main :: IO ()
 main = getArgs >>= (\args -> if length args == 3
