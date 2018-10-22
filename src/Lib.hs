@@ -76,12 +76,11 @@ impDecl = do
                          spaces1
                          alias <- ident
                          return (m ++ " as " ++ alias)))
-  r <- option "" ((<|>) (do spaces1
-                            string "hiding"
-                            spaces1
-                            is <- imports
-                            return ("hiding " ++ is))
-                        (spaces1 >> imports))
+  r <- option "" (spaces1 >> ((<|>) (do string "hiding"
+                                        spaces1
+                                        is <- imports
+                                        return ("hiding " ++ is))
+                                    imports))
   return ("import " ++ q ++ " " ++ m ++ " " ++ r)
 
 imports = fmap (("("++) . (++")") . intercalate ", ") (parens (sepEndBy import' spaces1))
@@ -111,24 +110,24 @@ dataDef = do
   string "data"
   spaces1
   lhs <- simpletype
-  rhs <- option "" (spaces1 >> constrs)
-  der <- option "" (spaces1 >> deriving')
-  return ("data " ++ lhs ++ " " ++ rhs ++ " " ++ der)
+  rhs <- option [] (spaces1 >> sepEndBy (parens (constrs <|> deriving')) spaces1)
+  return ("data " ++ lhs ++ " " ++ unwords rhs)
 
 constrs = fmap (("= "++) . (intercalate " | "))
-               (parens (string "=" >> spaces1 >> (sepEndBy1 constr spaces1)))
+               (string "=" >> spaces1 >> (sepEndBy1 constr spaces1))
 
-constr = choice [ ident
-                , parens (do string "record"
-                             spaces1
-                             con <- ident
-                             spaces1
-                             fields <- fmap (intercalate ", ") (sepEndBy1 field spaces1)
-                             return (con ++ " { " ++ fields ++ " }"))
-                , parens (do con <- ident
-                             spaces1
-                             ts <- sepEndBy1 type' spaces1
-                             return (con ++ " " ++ unwords ts)) ]
+constr = ident <|> parens pconstr
+
+pconstr = (<|>) (do string "record"
+                    spaces1
+                    con <- ident
+                    spaces1
+                    fields <- fmap (intercalate ", ") (sepEndBy1 field spaces1)
+                    return (con ++ " { " ++ fields ++ " }"))
+                (do con <- ident
+                    spaces1
+                    ts <- sepEndBy1 type' spaces1
+                    return (con ++ " " ++ unwords ts))
 
 newtypeDef = do
   string "newtype"
@@ -136,7 +135,7 @@ newtypeDef = do
   lhs <- simpletype
   spaces1
   rhs <- newconstr
-  der <- option "" (spaces1 >> deriving')
+  der <- option "" (spaces1 >> parens deriving')
   return ("newtype " ++ lhs ++ " = " ++ rhs ++ " " ++ der)
 
 newconstr = parens ((<|>) (do string "record"
@@ -155,7 +154,7 @@ field = parens (do name <- ident
                    t <- type'
                    return (name ++ " = " ++ t))
 
-deriving' = fmap (("deriving "++) . unwords) (parens (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1))
+deriving' = fmap (("deriving ("++) . (++")") . (intercalate ", ")) (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1)
 
 classDef = do
   string "class"
@@ -192,7 +191,7 @@ typeSig = do
 def = do
   char '='
   spaces1
-  lhs <- pat
+  lhs <- lhsPat
   spaces1
   rhs <- expr
   return (lhs ++ " = " ++ rhs)
@@ -202,61 +201,94 @@ simpletype = ident <|> parens (do tyCon <- ident
                                   params <- sepEndBy1 ident spaces1
                                   return (tyCon ++ " " ++ unwords params))
 
-type' = ident <|> funType <|> typeApp
+type' = choice [ ident
+               , parens' ptype
+               , listType ]
 
-funType = parens $ do
+-- type in parens
+ptype = choice [ funType
+               , tupType
+               , typeApp
+               , spaces' ]
+
+funType = do
   string "->"
   spaces1
   t0 <- type'
   spaces1
   tys <- sepEndBy1 type' spaces1
-  return ("(" ++ foldl (\acc t -> acc ++ " -> " ++ t) t0 tys ++ ")")
+  return (foldl (\acc t -> acc ++ " -> " ++ t) t0 tys)
 
-typeApp = parens $ do
+tupType = do
+  char ','
+  spaces1
+  ts <- sepEndBy1 type' spaces1
+  return (intercalate ", " ts)
+
+typeApp = do
   con <- type'
   spaces1
   args <- sepEndBy1 type' spaces1
   return (con ++ " " ++ unwords args)
 
 pat :: Parsec String u String
-pat = choice [ ident
-             , negLit
-             , lit
-             , wildcard
-             , parens' (do char '@'
-                           name <- ident
-                           p <- pat
-                           return (name ++ " @ " ++ p))
-             , char '(' <:> spaces' <++> string ")"
-             , char '[' <:> spaces' <++> string "]"
-             , parens' (do char ','
-                           spaces1
-                           ps <- sepEndBy1 pat spaces1
-                           return (intercalate ", " ps))
-             , brackets' (fmap (intercalate ", ") (sepEndBy1 pat spaces1))
-             , rpat ]
+pat = pat' parens'
 
+lhsPat = pat' parens
+
+pat' par = choice [ ident
+                  , lit
+                  , wildcard
+                  , par ppat
+                  , brackets' (fmap (intercalate ", ") (sepEndBy pat spaces1))
+                  , rpat ]
+
+-- pattern in parens
+ppat = choice [ negLit
+              , do char '@'
+                   name <- ident
+                   p <- pat
+                   return (name ++ " @ " ++ p)
+              , do char ','
+                   spaces1
+                   ps <- sepEndBy1 pat spaces1
+                   return (intercalate ", " ps)
+              , dpat
+              , spaces' ]
+
+-- destructuring pattern
+dpat = do con <- ident
+          spaces1
+          ps <- sepEndBy1 pat spaces1
+          return (con ++ " " ++ unwords ps)
+
+-- record pattern
 rpat :: Parsec String u String
 rpat = parens (do string "record"
                   spaces1
                   fs <- sepEndBy1 fpat spaces1
                   return ("{" ++ intercalate ", " fs ++ "}"))
 
+-- record field pattern
 fpat :: Parsec String u String
 fpat = parens (do name <- ident
                   spaces1
                   p <- pat
                   return (name ++ " = " ++ p))
 
-negLit = parens' (char '-' <:> spaces1 <++> num)
+negLit = char '-' <:> spaces1 <++> num
 
-lit = num <|> str
+lit = num <|> str <|> chr
 
 wildcard = string "_"
 
 num = many1 digit <++> option "" (char '.' <:> many1 digit)
 
-str = char '"' <:> fmap concat (many (escaped <|> fmap (\c -> [c]) (noneOf ['"']))) <++> string "\""
+str = char '"' <:>  fmap concat (many (escaped <|> fmap (\c -> [c]) (noneOf ['"'])))
+               <++> string "\""
+
+chr = char '\'' <:>  (escaped <|> fmap (\c -> [c]) (noneOf ['\'']))
+                <++> string "'"
 
 escaped :: Parsec String u String
 escaped = do
@@ -268,12 +300,12 @@ ident = (identFirstChar <:> many identRestChar) <|> rator
 
 identFirstChar = letter <|> char '_'
 
-identRestChar = alphaNum <|> oneOf "_'"
+identRestChar = alphaNum <|> oneOf "_'."
 
 rator = fmap (("("++) . (++")")) (many1 ratorChar)
 
 ratorChar = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  
+
 parens = between (char '(' >> spaces) (spaces >> char ')')
 
 parens' = (fmap (("("++) . (++")"))) . parens
@@ -293,7 +325,7 @@ spaces' = many space
 (<:>) :: Monad t => t a -> t [a] -> t [a]
 (<:>) = liftM2 (:)
 
-expr = choice [ list
+expr = choice [ listExpr
               , lit
               , ident
               , parens' pexpr]
@@ -310,31 +342,28 @@ pexpr = choice [ typeAscr
                , update ]
 
 typeAscr = do
-  string "::"
-  spaces1
+  try (string "::" >> spaces1)
   e <- expr
   spaces1
   t <- type'
   return (e ++ " :: " ++ t)
 
 lam = do
-  string "\\"
-  spaces1
+  try (string "\\" >> spaces1)
   ps <- parens (sepEndBy1 pat spaces1)
   spaces1
   b <- expr
   return ("\\ " ++ unwords ps ++ " -> " ++ b)
 
 let_ = do
-  string "let"
-  spaces1
+  try (string "let" >> spaces1)
   binds <- parens decls1
   spaces1
   bod <- expr
   return ("let " ++ binds ++" in " ++ bod)
 
 if_ = do
-  string "if"
+  try (string "if" >> spaces1)
   spaces1
   pred <- expr
   spaces1
@@ -344,7 +373,7 @@ if_ = do
   return ("if " ++ pred ++ " then " ++ conseq ++ " else " ++ alt)
 
 match = do
-  string "match"
+  try (string "match" >> spaces1)
   spaces1
   e <- expr
   spaces1
@@ -358,42 +387,40 @@ case_ = parens $ do
   spaces1
   b <- expr
   return (p ++ " -> " ++ b)
-  
+
 do_ = do
-  string "do"
-  spaces1
+  try (string "do" >> spaces1)
   ss <- stmts
   return ("do " ++ ss)
 
 stmts = fmap (intercalate "; ") (sepEndBy1 stmt spaces1)
 
-stmt = bind <|> expr
+stmt = parens (bind <|> pexpr) <|> expr
 
-bind = parens $ do
-  string "<-"
-  spaces1
+bind = do
+  try (string "<-" >> spaces1)
   lhs <- pat
   spaces1
   rhs <- expr
   return (lhs ++ " <- " ++ rhs)
-  
+
 app = do
   op <- expr
   spaces1
   args <- fmap unwords (sepEndBy1 expr spaces1)
   return (op ++ " " ++ args)
-  
+
 tuple = do
-  char ','
-  spaces1
+  try (char ',' >> spaces1)
   es <- fmap (intercalate ", ") (sepEndBy1 expr spaces1)
   return es
-  
-list = brackets' (fmap (intercalate ", ") (sepEndBy1 expr spaces1))
+
+listExpr = brackets' (fmap (intercalate ", ") (sepEndBy1 expr spaces1))
+
+listType = brackets' type'
 
 record = do
-  string "record"
-  spaces1
+  try (string "record" >> spaces1)
   fs <- fmap (intercalate ", ") (sepEndBy1 fbind spaces1)
   return ("{ " ++ fs ++ " }")
 
