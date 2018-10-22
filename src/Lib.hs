@@ -334,6 +334,7 @@ pexpr = choice [ typeAscr
                , lam
                , let_
                , if_
+               , cond
                , match
                , do_
                , app
@@ -364,7 +365,6 @@ let_ = do
 
 if_ = do
   try (string "if" >> spaces1)
-  spaces1
   pred <- expr
   spaces1
   conseq <- expr
@@ -372,9 +372,34 @@ if_ = do
   alt <- expr
   return ("if " ++ pred ++ " then " ++ conseq ++ " else " ++ alt)
 
+-- macro
+cond = do
+  try (string "cond" >> spaces1)
+  (cs, e) <- clauses
+  return (foldr (\(test, expr) next -> "if "++test++" then "++expr++" else ("++next++")")
+                e
+                cs)
+
+clauses :: Parsec String u ([(String, String)], String)
+clauses = (>>=) (parens (fmap Left elseClause <|> fmap Right clause))
+                (\c -> case c of
+                         Left e  -> return ([], e)
+                         Right c -> fmap (\(cs, e) -> (c:cs, e))
+                                         (spaces1 >> clauses))
+
+elseClause = do
+  try (string "else" >> spaces1)
+  e <- expr
+  return e
+
+clause = do
+  t <- expr
+  spaces1
+  e <- expr
+  return (t, e)
+
 match = do
   try (string "match" >> spaces1)
-  spaces1
   e <- expr
   spaces1
   cs <- cases
