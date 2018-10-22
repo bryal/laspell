@@ -304,7 +304,7 @@ identRestChar = alphaNum <|> oneOf "_'."
 
 rator = fmap (("("++) . (++")")) (many1 ratorChar)
 
-ratorChar = oneOf ":!#$%&*+./<=>?@\\^|-~"
+ratorChar = oneOf ":!#$%&*+.,/<=>?@\\^|-~"
 
 parens = between (char '(' >> spaces) (spaces >> char ')')
 
@@ -330,15 +330,15 @@ expr = choice [ listExpr
               , ident
               , parens' pexpr]
 
-pexpr = choice [ typeAscr
+pexpr = choice [ tuple
+               , typeAscr
                , lam
                , let_
                , if_
                , cond
-               , match
+               , caseOf
                , do_
                , app
-               , tuple
                , record
                , update ]
 
@@ -398,8 +398,8 @@ clause = do
   e <- expr
   return (t, e)
 
-match = do
-  try (string "match" >> spaces1)
+caseOf = do
+  try (string "case" >> spaces1)
   e <- expr
   spaces1
   cs <- cases
