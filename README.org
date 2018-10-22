@@ -32,9 +32,6 @@ stack install
 
 ** Example
 
-   /NOTE: Not actually implemented yet! Just the envisioned
-   usage/syntax./
-
    #+BEGIN_SRC haskell
 {-# OPTIONS -F -pgmF laspell #-}
 
@@ -44,8 +41,8 @@ stack install
 
 (:: f (-> Int Int Int))
 (= (f x y)
-   (+ a x y))
-   
+   (sum [a x y]))
+
 (= main (do (putStrLn "result of computation:")
             (print (f 2 3))))
 
