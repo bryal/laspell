@@ -349,6 +349,7 @@ expr = choice [ listExpr
 pexpr = choice [ tuple
                , opFold
                , typeAscr
+               , lamCase
                , lam
                , let_
                , if_
@@ -377,6 +378,11 @@ typeAscr = do
   spaces1
   t <- type'
   return (e ++ " :: " ++ t)
+
+lamCase = do
+  try (string "\\case" >> spaces1)
+  cs <- cases
+  return ("\\case " ++ cs)
 
 lam = do
   try (string "\\" >> spaces1)
