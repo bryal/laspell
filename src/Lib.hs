@@ -66,8 +66,8 @@ export = ident <|> parens (do constr <- ident
 body = do (fmap unlines (sepEndBy (parens (impDecl <|> topDecl)) spaces))
 
 impDecl = do
-  string "import"
-  q <- option "" (char '-' >> string "qualified")
+  try (string "import")
+  q <- option "" (try (string " qualified"))
   spaces1
   m <- (<|>) ident
              (parens (do string "as"
@@ -81,7 +81,7 @@ impDecl = do
                                         is <- imports
                                         return ("hiding " ++ is))
                                     imports))
-  return ("import " ++ q ++ " " ++ m ++ " " ++ r)
+  return ("import" ++ q ++ " " ++ m ++ " " ++ r)
 
 imports = fmap (("("++) . (++")") . intercalate ", ") (parens (sepEndBy import' spaces1))
 
