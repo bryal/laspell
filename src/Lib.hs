@@ -212,6 +212,7 @@ type' = choice [ ident
 
 -- type in parens
 ptype = choice [ funType
+               , ctxType
                , tupType
                , typeApp
                , spaces' ]
@@ -223,6 +224,14 @@ funType = do
   spaces1
   tys <- sepEndBy1 type' spaces1
   return (foldl (\acc t -> acc ++ " -> " ++ t) t0 tys)
+
+ctxType = do
+  try (string "=>")
+  spaces1
+  ctx <- parens (ident <++> spaces1 <++> ident)
+  spaces1
+  t <- type'
+  return (ctx ++ " => " ++ t)
 
 tupType = do
   char ','
