@@ -6,6 +6,7 @@ import Text.Parsec
 import Data.Char (isMark, isPunctuation, isSymbol)
 import Data.List (intercalate)
 import Data.Either
+import Data.Functor
 import Control.Monad
 import qualified HIndent as H
 import qualified HIndent.Types as HT
@@ -186,7 +187,7 @@ decl = parens decl'
 decl' = typeSig <|> def
 
 typeSig = do
-  try (string "::")
+  try (string ":")
   spaces1
   name <- ident
   spaces1
@@ -318,7 +319,10 @@ identRestChar = alphaNum <|> oneOf "_'."
 
 rator = fmap (("("++) . (++")")) rator'
 
-rator' = many1 ratorChar
+rator' = listCons <|> many1 ratorChar
+
+listCons :: Parsec String u String
+listCons = try (string ":" >> spaces1) $> "::"
 
 ratorChar = oneOf ":!#$%&*+.,/<=>?@\\^|-~"
 
@@ -373,7 +377,7 @@ opFold' dirc foldf = do
   return (foldf (\a b -> concat ["(",a," ",op," ",b,")"]) es)
 
 typeAscr = do
-  try (string "::" >> spaces1)
+  try (string ":" >> spaces1)
   e <- expr
   spaces1
   t <- type'
@@ -495,3 +499,11 @@ update = do
   spaces1
   assignments <- fmap (intercalate ", ") (sepEndBy1 fbind spaces1)
   return (e ++ " { " ++ assignments ++ " }")
+
+--filename = "../octaesar/src/Parse.hs"
+filename = "Test.hs"
+src = readFile filename
+trans = fmap ((translate filename) . removeComments) src
+prep = fmap hindent trans
+
+ptrans = trans >>= putStrLn
