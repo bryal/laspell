@@ -110,7 +110,7 @@ dataDef = do
   try (string "data")
   spaces1
   lhs <- simpletype
-  rhs <- option [] (spaces1 >> sepEndBy (parens (constrs <|> deriving')) spaces1)
+  rhs <- option [] (spaces1 >> sepEndBy (parens (constrs <|> gadtConstrs <|> deriving')) spaces1)
   return ("data " ++ lhs ++ " " ++ unwords rhs)
 
 constrs = fmap (("= "++) . (intercalate " | "))
@@ -128,6 +128,11 @@ pconstr = (<|>) (do string "record"
                     spaces1
                     ts <- sepEndBy1 type' spaces1
                     return (con ++ " " ++ unwords ts))
+
+gadtConstrs = fmap (("where "++) . (intercalate "; "))
+               (string "where" >> spaces1 >> (sepEndBy1 gadtConstr spaces1))
+
+gadtConstr = parens typeSig
 
 newtypeDef = do
   try (string "newtype")
@@ -168,7 +173,7 @@ instanceDef = do
   spaces1
   lhs <- parens (ident <++> spaces1 <++> ident)
   rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
-  return ("class " ++ lhs ++ rhs)
+  return ("instance " ++ lhs ++ rhs)
 
 decls = decls' sepEndBy
 
