@@ -374,7 +374,10 @@ opFoldr = opFold' 'r' foldr1
 opFold' dirc foldf = do
   op <- try (char dirc >> rator' <* spaces1)
   es <- sepEndBy1 expr spaces1
-  return (foldf (\a b -> concat ["(",a," ",op," ",b,")"]) es)
+  let s = foldf (\a b -> concat ["(",a," ",op," ",b,")"]) es
+  return (if length es > 1
+          then init (tail s) -- strip parens
+          else s)
 
 typeAscr = do
   try (string ":" >> spaces1)
