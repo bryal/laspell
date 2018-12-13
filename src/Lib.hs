@@ -99,7 +99,7 @@ topDecl = choice [ typeDef
                  , decl' ]
 
 typeDef = do
-  string "type"
+  try (string "type")
   spaces1
   lhs <- simpletype
   spaces1
@@ -107,7 +107,7 @@ typeDef = do
   return ("type " ++ lhs ++ " = " ++ rhs)
 
 dataDef = do
-  string "data"
+  try (string "data")
   spaces1
   lhs <- simpletype
   rhs <- option [] (spaces1 >> sepEndBy (parens (constrs <|> deriving')) spaces1)
@@ -130,7 +130,7 @@ pconstr = (<|>) (do string "record"
                     return (con ++ " " ++ unwords ts))
 
 newtypeDef = do
-  string "newtype"
+  try (string "newtype")
   spaces1
   lhs <- simpletype
   spaces1
@@ -157,14 +157,14 @@ field = parens (do name <- ident
 deriving' = fmap (("deriving ("++) . (++")") . (intercalate ", ")) (string "deriving" >> spaces1 >> sepEndBy1 ident spaces1)
 
 classDef = do
-  string "class"
+  try (string "class")
   spaces1
   lhs <- parens (ident <++> spaces1 <++> ident)
   rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
   return ("class " ++ lhs ++ rhs)
 
 instanceDef = do
-  string "instance"
+  try (string "instance")
   spaces1
   lhs <- parens (ident <++> spaces1 <++> ident)
   rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
@@ -181,7 +181,7 @@ decl = parens decl'
 decl' = typeSig <|> def
 
 typeSig = do
-  string "::"
+  try (string "::")
   spaces1
   name <- ident
   spaces1
@@ -212,7 +212,7 @@ ptype = choice [ funType
                , spaces' ]
 
 funType = do
-  string "->"
+  try (string "->")
   spaces1
   t0 <- type'
   spaces1
@@ -454,7 +454,7 @@ fbind = parens $ do
   spaces1
   rhs <- expr
   return (lhs ++ " = " ++ rhs)
-  
+
 update = do
   e <- expr
   spaces1
