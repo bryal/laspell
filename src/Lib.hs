@@ -316,7 +316,9 @@ identFirstChar = letter <|> char '_'
 
 identRestChar = alphaNum <|> oneOf "_'."
 
-rator = fmap (("("++) . (++")")) (many1 ratorChar)
+rator = fmap (("("++) . (++")")) rator'
+
+rator' = many1 ratorChar
 
 ratorChar = oneOf ":!#$%&*+.,/<=>?@\\^|-~"
 
@@ -345,6 +347,7 @@ expr = choice [ listExpr
               , parens' pexpr]
 
 pexpr = choice [ tuple
+               , opFold
                , typeAscr
                , lam
                , let_
@@ -355,6 +358,18 @@ pexpr = choice [ tuple
                , app
                , record
                , update ]
+
+-- (r+ a b c d) => a + (b + (c + d))
+-- (l$ a b c d) => ((a $ b) $ c) $ d
+opFold = opFoldl <|> opFoldr
+
+opFoldl = opFold' 'l' foldl1
+opFoldr = opFold' 'r' foldr1
+
+opFold' dirc foldf = do
+  op <- try (char dirc >> rator' <* spaces1)
+  es <- sepEndBy1 expr spaces1
+  return (foldf (\a b -> concat ["(",a," ",op," ",b,")"]) es)
 
 typeAscr = do
   try (string "::" >> spaces1)
