@@ -268,8 +268,16 @@ ppat = choice [ negLit
                    spaces1
                    ps <- sepEndBy1 pat spaces1
                    return (intercalate ", " ps)
+              , listDestrPat
               , dpat
               , spaces' ]
+
+listDestrPat =
+  do try (string "::" >> spaces1)
+     car <- pat
+     spaces1
+     cdr <- pat
+     return (car ++ ":" ++ cdr)
 
 -- destructuring pattern
 dpat = do con <- ident
