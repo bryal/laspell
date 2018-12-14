@@ -61,7 +61,7 @@ exports = fmap (("("++) . (++")") . intercalate ", ") (parens (sepEndBy export s
 
 export = ident <|> parens (do constr <- ident
                               spaces1
-                              variants <- sepEndBy1 ident spaces1
+                              variants <- sepEndBy1 (string ".." <|> ident) spaces1
                               return (constr ++ " (" ++ intercalate ", " variants ++ ")"))
 
 body = do (fmap unlines (sepEndBy (parens (impDecl <|> topDecl)) spaces))
@@ -89,7 +89,7 @@ imports = fmap (("("++) . (++")") . intercalate ", ") (parens (sepEndBy import' 
 import' = (<|>) ident
                 (parens (do tyCon <- ident
                             spaces1
-                            members <- sepEndBy1 ident spaces1
+                            members <- sepEndBy1 (string ".." <|> ident) spaces1
                             return (tyCon ++ " (" ++ intercalate ", " members ++ ")")))
 
 topDecl = choice [ typeDef
