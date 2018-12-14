@@ -165,9 +165,22 @@ deriving' = fmap (("deriving ("++) . (++")") . (intercalate ", ")) (string "deri
 classDef = do
   try (string "class")
   spaces1
-  lhs <- parens (ident <++> spaces1 <++> ident)
+  lhs <- classLhs
   rhs <- option "" (fmap (" where "++) (spaces1 >> decls1))
   return ("class " ++ lhs ++ rhs)
+
+classLhs = parens pClassLhs
+
+pClassLhs = choice [ ctxClassLhs
+                   , (ident <++> spaces1 <++> ident) ]
+
+ctxClassLhs = do
+  try (string "=>")
+  spaces1
+  ctx <- parens (ident <++> spaces1 <++> ident)
+  spaces1
+  lhs <- classLhs
+  return (ctx ++ " => " ++ lhs)
 
 instanceDef = do
   try (string "instance")
