@@ -462,7 +462,7 @@ do_ = do
 
 stmts = fmap (intercalate "; ") (sepEndBy1 stmt spaces1)
 
-stmt = parens (bind <|> pexpr) <|> expr
+stmt = parens (bind <|> letStmt <|> pexpr) <|> expr
 
 bind = do
   try (string "<-" >> spaces1)
@@ -470,6 +470,13 @@ bind = do
   spaces1
   rhs <- expr
   return (lhs ++ " <- " ++ rhs)
+
+letStmt = do
+  try (string "let" >> spaces1)
+  lhs <- pat
+  spaces1
+  rhs <- expr
+  return (concat ["let { ",lhs," = ",rhs," }"])
 
 app = do
   op <- expr
