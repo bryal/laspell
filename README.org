@@ -27,7 +27,7 @@ stack install
    #+END_SRC
 
    to the file you want to use LISP syntax in. Then you can build/compile
-   your file/project as usual.
+   your file/project with ghc/cabal/stack as usual.
 
 
 ** Example
